@@ -1,10 +1,9 @@
-// Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel PhysicsIntegration
 
 #include <Assets/_Shaders/Constants.cginc>
 
-RWStructuredBuffer<float3> _positionBuffer;
-RWStructuredBuffer<float3> _velocityBuffer;
+RWStructuredBuffer<float3> _positionBuffer; // size = BLOCK_SIZE * THREADS_PER_BLOCK
+RWStructuredBuffer<float3> _velocityBuffer; // size = BLOCK_SIZE * THREADS_PER_BLOCK
 
 float _velocityDamping;
 float _deltaTime;
@@ -26,6 +25,7 @@ void PhysicsIntegration(uint3 tid : SV_DispatchThreadID)
     if (position.y < 0)
     {
         velocity = reflect(velocity, float3(0,1,0));
+        position = float3(position.x, 0, position.z);
     }
     
     _velocityBuffer[id] = velocity;

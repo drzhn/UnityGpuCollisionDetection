@@ -19,8 +19,10 @@ public class SortingShaderContainer
 public class PhysicsShaderContainer
 {
     public ComputeShader PhysicsIntegrationShader => _physicsIntegrationShader;
+    public ComputeShader CellIdGenerationShader => _cellIdGenerationShader;
 
     [SerializeField] private ComputeShader _physicsIntegrationShader;
+    [SerializeField] private ComputeShader _cellIdGenerationShader;
 }
 
 [Serializable]

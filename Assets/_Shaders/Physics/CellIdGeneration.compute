@@ -1,0 +1,110 @@
+#pragma kernel CellIdGeneration
+
+#include <Assets/_Shaders/Constants.cginc>
+
+StructuredBuffer<float3> _positionBuffer; // size = BLOCK_SIZE * THREADS_PER_BLOCK
+
+// object cell hash. Contains hashes for home cell and phantom cell
+RWStructuredBuffer<uint> _cellHash; // size = BLOCK_SIZE * THREADS_PER_BLOCK * 8
+// here we pack object data: [-- cell type (1)---] [--home cell type(3)--][--cell types where object overlap(8)--] [--object index (20)--]
+RWStructuredBuffer<uint> _packedCellTypeControlAndIndex; // size = BLOCK_SIZE * THREADS_PER_BLOCK * 8
+
+float _sphereDiameter;
+float _cellSize;
+
+uint PackTypeControlAndIndex(uint isHome, uint homeCellType, uint overlappedCellTypes, uint objectIndex)
+{
+    return (isHome << 31) | (homeCellType << 28) | (overlappedCellTypes << 20) | (objectIndex << 0);
+}
+
+int GetNeighbourOffset(float v)
+{
+    const int floor_value = floor(v);
+    const float middle = floor_value + 0.5f;
+    return sign(v - middle);
+}
+
+uint CalculateCellType(int x, int y, int z)
+{
+    return (x % 2) + (y % 2) * 2 + (z % 2) * 4;
+}
+
+bool SphereCubeIntersection(float3 cubeMin, float3 cubeMax, float3 sphereCenter, float sphereRadius)
+{
+    float dmin = 0;
+    const float r2 = pow(sphereRadius, 2);
+    for (int i = 0; i < 3; i++)
+    {
+        if (sphereCenter[i] < cubeMin[i])
+            dmin += pow(sphereCenter[i] - cubeMin[i], 2);
+        else if (sphereCenter[i] > cubeMax[i])
+            dmin += pow(sphereCenter[i] - cubeMax[i], 2);
+    }
+
+    if (dmin <= r2) return (true);
+    return false;
+}
+
+[numthreads(THREADS_PER_BLOCK,1,1)]
+void CellIdGeneration(uint3 tid : SV_DispatchThreadID)
+{
+    const uint id = tid.x;
+    const float3 position = _positionBuffer[id];
+
+    float3 cellPos = position / _cellSize;
+
+    int3 cellId = int3(floor(cellPos.x), floor(cellPos.y), floor(cellPos.z));
+
+    _cellHash[id * 8 + 0] = (cellId.x << XSHIFT) | (cellId.y << YSHIFT) | (cellId.z << ZSHIFT);
+    const uint homeCellType = CalculateCellType(cellId.x, cellId.y, cellId.z);
+
+    uint cellsWhereObjectResides = 1 << homeCellType;
+
+    const int3 offset = int3(
+        GetNeighbourOffset(cellPos.x),
+        GetNeighbourOffset(cellPos.y),
+        GetNeighbourOffset(cellPos.z)
+    );
+
+    int curIndex = 1;
+
+    int j = 0;
+    
+    for (j = 1; j < 8; j++)
+    {
+        const int3 neighbourOffset = offset * int3((j >> 0) & 1, (j >> 1) & 1, (j >> 2) & 1);
+
+        const int3 neighbour = cellId + neighbourOffset;
+
+        if (neighbour.x < 0 || neighbour.y < 0 || neighbour.z < 0 || !SphereCubeIntersection(
+                neighbour,
+                neighbour + float3(1, 1, 1),
+                cellPos,
+                _sphereDiameter / 2 / _cellSize)
+        )
+        {
+            continue;
+        }
+
+        _cellHash[id * 8 + j] = (neighbour.x << XSHIFT) | (neighbour.y << YSHIFT) | (neighbour.z << ZSHIFT);
+        const uint neighbourCellType = CalculateCellType(neighbour.x, neighbour.y, neighbour.z);
+        cellsWhereObjectResides |= 1 << neighbourCellType;
+
+        curIndex++;
+    }
+
+    for (j = curIndex; j < 8; j++)
+    {
+        _cellHash[id * 8 + j] = 0xFFFFFFFF;
+    }
+
+    for (j = 0; j < 8; j++)
+    {
+        _packedCellTypeControlAndIndex[id * 8 + j] = PackTypeControlAndIndex(
+            j == 0 ? 1 : 0,
+            homeCellType,
+            cellsWhereObjectResides,
+            id
+        );
+    }
+}

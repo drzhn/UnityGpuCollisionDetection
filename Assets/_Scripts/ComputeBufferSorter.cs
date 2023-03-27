@@ -115,14 +115,14 @@ public class ComputeBufferSorter: IDisposable
 
             _globalRadixSortShader.Dispatch(_globalRadixKernel, Constants.BLOCK_SIZE, 1, 1);
 
-            GetIntermediateDataBack();
-            ValidateIntermediateData(bitOffset);
+            // GetIntermediateDataBack();
+            // ValidateIntermediateData(bitOffset);
         }
 
-        GetSortedDataBack();
+        // GetSortedDataBack();
         // PrintData();
 
-        ValidateSortedData();
+        // ValidateSortedData();
     }
 
     void GetIntermediateDataBack()

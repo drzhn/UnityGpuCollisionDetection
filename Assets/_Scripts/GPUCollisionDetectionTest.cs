@@ -16,17 +16,27 @@ public class GPUCollisionDetectionTest : MonoBehaviour
     private const int NumPerSide = 32;
     private const int NumObjects = NumPerSide * NumPerSide * NumPerSide;
 
+    private const float SphereDiameter = 1;
+    private const float CellSize = SphereDiameter * 1.41421356f;
+
     private ComputeBuffer _argsBuffer;
 
     private ComputeBuffer _positionBuffer;
     private ComputeBuffer _velocityBuffer;
+    private ComputeBuffer _hashBuffer;
+    private ComputeBuffer _packedCellTypeControlAndIndexBuffer;
 
     private ComputeShader _physicsIntegrationShader;
     private int _physicsIntegrationKernel;
 
+    private ComputeShader _cellIdGenerationShader;
+    private int _cellIdGenerationKernel;
+
+    private ComputeBufferSorter _sorter;
+
     private void Awake()
     {
-        if (NumObjects != Constants.THREADS_PER_BLOCK * Constants.BLOCK_SIZE)
+        if (NumObjects != Constants.THREADS_PER_BLOCK * Constants.DATA_BLOCK_SIZE)
         {
             throw new Exception();
         }
@@ -42,6 +52,9 @@ public class GPUCollisionDetectionTest : MonoBehaviour
 
         _positionBuffer = new ComputeBuffer(NumObjects, Marshal.SizeOf<Vector3>());
         _velocityBuffer = new ComputeBuffer(NumObjects, Marshal.SizeOf<Vector3>());
+        _hashBuffer = new ComputeBuffer(NumObjects * 8, Marshal.SizeOf<uint>());
+        _packedCellTypeControlAndIndexBuffer = new ComputeBuffer(NumObjects * 8, Marshal.SizeOf<uint>());
+
         Vector3[] data = new Vector3[NumObjects];
         for (int i = 0; i < NumPerSide; i++)
         {
@@ -75,14 +88,34 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         _physicsIntegrationKernel = _physicsIntegrationShader.FindKernel("PhysicsIntegration");
         _physicsIntegrationShader.SetBuffer(_physicsIntegrationKernel, "_positionBuffer", _positionBuffer);
         _physicsIntegrationShader.SetBuffer(_physicsIntegrationKernel, "_velocityBuffer", _velocityBuffer);
+
+        _cellIdGenerationShader = _shaderContainer.Physics.CellIdGenerationShader;
+        _cellIdGenerationKernel = _cellIdGenerationShader.FindKernel("CellIdGeneration");
+        _cellIdGenerationShader.SetFloat("_sphereDiameter", SphereDiameter);
+        _cellIdGenerationShader.SetFloat("_cellSize", CellSize);
+        _cellIdGenerationShader.SetBuffer(_cellIdGenerationKernel, "_positionBuffer", _positionBuffer);
+        _cellIdGenerationShader.SetBuffer(_cellIdGenerationKernel, "_cellHash", _hashBuffer);
+        _cellIdGenerationShader.SetBuffer(_cellIdGenerationKernel, "_packedCellTypeControlAndIndex", _packedCellTypeControlAndIndexBuffer);
+
+        _sorter = new ComputeBufferSorter(
+            Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK,
+            _hashBuffer,
+            _packedCellTypeControlAndIndexBuffer,
+            _shaderContainer
+        );
     }
 
+    // private uint[] _testData = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
     private void Update()
     {
         _physicsIntegrationShader.SetFloat("_velocityDamping", 1);
         _physicsIntegrationShader.SetFloat("_deltaTime", Time.deltaTime);
-        _physicsIntegrationShader.Dispatch(_physicsIntegrationKernel, Constants.BLOCK_SIZE, 1, 1);
-
+        _physicsIntegrationShader.Dispatch(_physicsIntegrationKernel, Constants.DATA_BLOCK_SIZE, 1, 1);
+        
+        _cellIdGenerationShader.Dispatch(_cellIdGenerationKernel, Constants.DATA_BLOCK_SIZE, 1, 1);
+        
+        _sorter.Sort();
+        
         Graphics.DrawMeshInstancedIndirect(
             _mesh,
             0,
@@ -97,5 +130,9 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         _positionBuffer.Release();
         _velocityBuffer.Release();
         _argsBuffer.Release();
+        _hashBuffer.Release();
+        _packedCellTypeControlAndIndexBuffer.Release();
+        
+        _sorter.Dispose();
     }
 }
