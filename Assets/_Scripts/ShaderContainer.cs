@@ -3,11 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public interface IShaderContainer
-{
-    public SortingShaderContainer Sorting { get; }
-}
-
 [Serializable]
 public class SortingShaderContainer
 {
@@ -21,9 +16,19 @@ public class SortingShaderContainer
 }
 
 [Serializable]
-public class ShaderContainer : MonoBehaviour, IShaderContainer
+public class PhysicsShaderContainer
+{
+    public ComputeShader PhysicsIntegrationShader => _physicsIntegrationShader;
+
+    [SerializeField] private ComputeShader _physicsIntegrationShader;
+}
+
+[Serializable]
+public class ShaderContainer : MonoBehaviour
 {
     public SortingShaderContainer Sorting => _sorting;
+    public PhysicsShaderContainer Physics => _physics;
 
     [SerializeField] private SortingShaderContainer _sorting;
+    [SerializeField] private PhysicsShaderContainer _physics;
 }

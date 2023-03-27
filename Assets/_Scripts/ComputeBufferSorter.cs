@@ -4,7 +4,10 @@ using System.Linq;
 using System.Text;
 using UnityEngine;
 
-public class ComputeBufferSorter<TKey, TValue> : IDisposable where TKey: struct, IComparable where TValue: struct
+
+using TKey = System.UInt32;
+using TValue = System.UInt32;
+public class ComputeBufferSorter: IDisposable
 {
     private readonly ComputeShader _localRadixSortShader;
     private readonly ComputeShader _globalRadixSortShader;
@@ -38,7 +41,7 @@ public class ComputeBufferSorter<TKey, TValue> : IDisposable where TKey: struct,
     private readonly Dictionary<uint, int> _debugDataDictionary = new(256);
     private readonly uint _dataLength;
 
-    public ComputeBufferSorter(uint dataLength, ComputeBuffer keys, ComputeBuffer values, IShaderContainer shaderContainer)
+    public ComputeBufferSorter(uint dataLength, ComputeBuffer keys, ComputeBuffer values, ShaderContainer shaderContainer)
     {
         _keys = keys;
         _values = values;
