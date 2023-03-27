@@ -33,7 +33,7 @@ Shader "Custom/InstancingShader"
         fixed4 _Color;
 
         #ifdef SHADER_API_D3D11
-        StructuredBuffer<float4x4> objectMatrices;
+        StructuredBuffer<float3> _positionBuffer;
         #endif
 
         struct appdata
@@ -54,8 +54,8 @@ Shader "Custom/InstancingShader"
             #ifdef SHADER_API_D3D11
 
             UNITY_SETUP_INSTANCE_ID(v);
-            uint instanceId = v.instanceId;
-            v.vertex = mul( objectMatrices[instanceId], v.vertex);
+            const uint instanceId = v.instanceId;
+            v.vertex = float4(v.vertex.xyz + _positionBuffer[instanceId], 1);
 
             #endif
         }
