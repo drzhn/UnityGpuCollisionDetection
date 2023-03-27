@@ -1,0 +1,39 @@
+#pragma kernel ChangesGeneration
+#pragma kernel OffsetsGeneration
+
+#include <Assets/_Shaders/Constants.cginc>
+
+
+StructuredBuffer<uint> _cellHash; // size = BLOCK_SIZE * THREADS_PER_BLOCK * 8
+RWStructuredBuffer<uint> _changes; // size = BLOCK_SIZE * THREADS_PER_BLOCK * 8
+RWStructuredBuffer<uint> _offsets; // size = BLOCK_SIZE * THREADS_PER_BLOCK * 8
+
+[numthreads(THREADS_PER_BLOCK,1,1)]
+void ChangesGeneration(uint3 tid : SV_DispatchThreadID)
+{
+    const uint id = tid.x;
+    if (id == 0)
+    {
+        _changes[0] = 0;
+        return;
+    }
+    _changes[id] = _cellHash[id] > _cellHash[id-1] ? 1 : 0;
+}
+
+// After that we generate prefix sum and put it back to changes array 
+
+[numthreads(THREADS_PER_BLOCK,1,1)]
+void OffsetsGeneration(uint3 tid : SV_DispatchThreadID)
+{
+    const uint id = tid.x;
+    if (id == 0)
+    {
+        _offsets[0] = 0;
+        return;
+    }
+    
+    if (_changes[id] > _changes[id-1])
+    {
+        _offsets[_changes[id]] = id;
+    }
+} // TODO TEST IT!!!

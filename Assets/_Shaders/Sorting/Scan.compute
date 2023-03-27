@@ -23,26 +23,26 @@ void PreScan(uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
     const uint element = data[groupId * THREADS_PER_BLOCK + threadId];
     AllMemoryBarrierWithGroupSync();
     const uint wavePrefix = WavePrefixSum(element);
-    
+
     if (laneId == WARP_SIZE - 1)
     {
         scanTile[warpId] = wavePrefix + element;
     }
     GroupMemoryBarrierWithGroupSync();
-    
+
     if (threadId < THREADS_PER_BLOCK / WARP_SIZE)
     {
         const uint warpSum = scanTile[threadId];
         GroupMemoryBarrier();
         const uint warpPrefix = WavePrefixSum(warpSum);
         scanTile[threadId] = warpPrefix;
-    
+
         if (threadId == THREADS_PER_BLOCK / WARP_SIZE - 1)
         {
             blockSumsData[groupId] = warpPrefix + warpSum;
         }
     }
-    
+
     GroupMemoryBarrierWithGroupSync();
     data[groupId * THREADS_PER_BLOCK + threadId] = wavePrefix + scanTile[warpId];
 }
@@ -56,21 +56,21 @@ void BlockSum(uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
     // here each block process THREADS_PER_BLOCK elements
     // so, number of blocks will be BLOCK_SIZE / (THREADS_PER_BLOCK / BUCKET_SIZE)
     const uint blockSize = BLOCK_SIZE / (THREADS_PER_BLOCK / BUCKET_SIZE);
-    
+
     const uint threadId = tid.x;
     const uint warpId = threadId / WARP_SIZE;
     const uint laneId = threadId % WARP_SIZE;
-    
+
     const uint element = blockSumsData[threadId];
     AllMemoryBarrierWithGroupSync();
     const uint wavePrefix = WavePrefixSum(element);
-    
+
     if (laneId == WARP_SIZE - 1)
     {
         scanTile[warpId] = wavePrefix + element;
     }
     GroupMemoryBarrierWithGroupSync();
-    
+
     if (threadId < blockSize / WARP_SIZE)
     {
         const uint warpSum = scanTile[threadId];
@@ -78,7 +78,7 @@ void BlockSum(uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
         const uint warpPrefix = WavePrefixSum(warpSum);
         scanTile[threadId] = warpPrefix;
     }
-    
+
     GroupMemoryBarrierWithGroupSync();
     blockSumsData[threadId] = wavePrefix + scanTile[warpId];
 }
@@ -86,11 +86,11 @@ void BlockSum(uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 [numthreads(THREADS_PER_BLOCK,1,1)]
 void GlobalScan(uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 {
-    const uint threadId = tid.x; 
+    const uint threadId = tid.x;
     const uint groupId = gid.x;
-    
+
     const uint element = data[groupId * THREADS_PER_BLOCK + threadId];
     const uint blockSum = blockSumsData[groupId];
     AllMemoryBarrierWithGroupSync();
-    data[groupId * THREADS_PER_BLOCK + threadId] =  element + blockSum;
+    data[groupId * THREADS_PER_BLOCK + threadId] = element + blockSum;
 }
