@@ -344,6 +344,7 @@ MonoBehaviour:
   _physics:
     _physicsIntegrationShader: {fileID: 7200000, guid: 4d043a9e764c7ab4eb6512238ec553eb, type: 3}
     _cellIdGenerationShader: {fileID: 7200000, guid: 02650fd8086fe6b4f8bde118853fc2fe, type: 3}
+    _offsetsGenerationShader: {fileID: 7200000, guid: 611cc3907ac184f42bde97be31d670f6, type: 3}
 --- !u!1 &1095061538
 GameObject:
   m_ObjectHideFlags: 0

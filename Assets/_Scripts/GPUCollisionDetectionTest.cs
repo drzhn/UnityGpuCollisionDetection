@@ -164,7 +164,7 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         }
         // TestPrintComputeBuffer(_changesBuffer);
 
-        _sorter.Scan(_changesBuffer);
+        _sorter.Scan(_changesBuffer, Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK);
         _changesBuffer.GetData(_testData3);
         uint accumulatedValue = 0;
         for (int i = 1; i < Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK; i++)

@@ -57,7 +57,7 @@ public class ComputeBufferSorter: IDisposable
         _sortedBlocksValuesData = new DataBuffer<TValue>(Constants.DATA_ARRAY_COUNT);
         _offsetsData = new DataBuffer<uint>(Constants.BUCKET_SIZE * Constants.BLOCK_SIZE);
         _sizesData = new DataBuffer<uint>(Constants.BUCKET_SIZE * Constants.BLOCK_SIZE);
-        _sizesPrefixSumData = new DataBuffer<uint>(Constants.BLOCK_SIZE / (Constants.THREADS_PER_BLOCK / Constants.BUCKET_SIZE));
+        _sizesPrefixSumData = new DataBuffer<uint>(Constants.THREADS_PER_BLOCK);
 
         // Set data
 
@@ -73,10 +73,8 @@ public class ComputeBufferSorter: IDisposable
         _preScanKernel = _scanShader.FindKernel("PreScan");
         _blockSumKernel = _scanShader.FindKernel("BlockSum");
         _globalScanKernel = _scanShader.FindKernel("GlobalScan");
-        _scanShader.SetBuffer(_preScanKernel, "data", _sizesData.DeviceBuffer);
         _scanShader.SetBuffer(_preScanKernel, "blockSumsData", _sizesPrefixSumData.DeviceBuffer);
         _scanShader.SetBuffer(_blockSumKernel, "blockSumsData", _sizesPrefixSumData.DeviceBuffer);
-        _scanShader.SetBuffer(_globalScanKernel, "data", _sizesData.DeviceBuffer);
         _scanShader.SetBuffer(_globalScanKernel, "blockSumsData", _sizesPrefixSumData.DeviceBuffer);
 
         _globalRadixKernel = _globalRadixSortShader.FindKernel("GlobalRadixSort");
@@ -109,7 +107,7 @@ public class ComputeBufferSorter: IDisposable
             _sizesData.DeviceBuffer.GetData(_sizesLocalDataBeforeScan);
             // Debug.Log("Sizes before scan: " + Utils.ArrayToString(_sizesLocalDataBeforeScan));
 
-            Scan(_sizesData.DeviceBuffer);
+            Scan(_sizesData.DeviceBuffer, Constants.BUCKET_SIZE * Constants.BLOCK_SIZE);
             
             _globalRadixSortShader.Dispatch(_globalRadixKernel, Constants.BLOCK_SIZE, 1, 1);
 
@@ -123,14 +121,20 @@ public class ComputeBufferSorter: IDisposable
         // ValidateSortedData();
     }
 
-    public void Scan(ComputeBuffer bufferToScan)
+    public void Scan(ComputeBuffer bufferToScan, int dataSize)
     {
+        if (dataSize % Constants.THREADS_PER_BLOCK != 0)
+        {
+            throw new Exception("Currently, algorithm doesn't support arrays of any size");
+        }
+        
         _scanShader.SetBuffer(_preScanKernel, "data", bufferToScan);
         _scanShader.SetBuffer(_globalScanKernel, "data", bufferToScan);
+        _scanShader.SetInt( "_dataSize", dataSize);
         
-        _scanShader.Dispatch(_preScanKernel, Constants.BLOCK_SIZE / (Constants.THREADS_PER_BLOCK / Constants.BUCKET_SIZE), 1, 1);
+        _scanShader.Dispatch(_preScanKernel, dataSize / Constants.THREADS_PER_BLOCK, 1, 1);
         _scanShader.Dispatch(_blockSumKernel, 1, 1, 1);
-        _scanShader.Dispatch(_globalScanKernel, Constants.BLOCK_SIZE / (Constants.THREADS_PER_BLOCK / Constants.BUCKET_SIZE), 1, 1);
+        _scanShader.Dispatch(_globalScanKernel, dataSize / Constants.THREADS_PER_BLOCK , 1, 1);
     }
 
     void GetIntermediateDataBack()
