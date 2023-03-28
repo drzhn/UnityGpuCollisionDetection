@@ -2,10 +2,10 @@
 
 #include <Assets/_Shaders/Constants.cginc>
 
-StructuredBuffer<float3> _positionBuffer; // size = BLOCK_SIZE * THREADS_PER_BLOCK
+StructuredBuffer<float3> _positionBuffer; // size = DATA_BLOCK_SIZE * THREADS_PER_BLOCK
 
 // object cell hash. Contains hashes for home cell and phantom cell
-RWStructuredBuffer<uint> _cellHash; // size = BLOCK_SIZE * THREADS_PER_BLOCK
+RWStructuredBuffer<uint> _cellHash; // size = BLOCK_SIZE * THREADS_PER_BLOCK 
 // here we pack object data: [-- cell type (1)---] [--home cell type(3)--][--cell types where object resides(8)--] [--object index (20)--]
 RWStructuredBuffer<uint> _packedCellTypeControlAndIndex; // size = BLOCK_SIZE * THREADS_PER_BLOCK
 
@@ -22,16 +22,6 @@ int GetNeighbourOffset(float v)
     const int floor_value = floor(v);
     const float middle = floor_value + 0.5f;
     return sign(v - middle);
-}
-
-inline uint mod2(uint v)
-{
-    return v & 1;
-}
-
-uint CalculateCellType(int x, int y, int z)
-{
-    return mod2(x) + mod2(y) * 2 + mod2(z) * 4;
 }
 
 bool SphereCubeIntersection(float3 cubeMin, float3 cubeMax, float3 sphereCenter, float sphereRadius)
@@ -54,7 +44,15 @@ bool SphereCubeIntersection(float3 cubeMin, float3 cubeMax, float3 sphereCenter,
 void CellIdGeneration(uint3 tid : SV_DispatchThreadID)
 {
     const uint id = tid.x;
+    int j = 0;
+
     const float3 position = _positionBuffer[id];
+
+    for (j = 0; j < 8; j++)
+    {
+        _cellHash[id * 8 + j] = 0xFFFFFFFF;
+    }
+    
 
     float3 cellPos = position / _cellSize;
 
@@ -72,8 +70,6 @@ void CellIdGeneration(uint3 tid : SV_DispatchThreadID)
     );
 
     int curIndex = 1;
-
-    int j = 0;
 
     for (j = 1; j < 8; j++)
     {
@@ -93,14 +89,9 @@ void CellIdGeneration(uint3 tid : SV_DispatchThreadID)
 
         _cellHash[id * 8 + j] = (neighbour.x << XSHIFT) | (neighbour.y << YSHIFT) | (neighbour.z << ZSHIFT);
         const uint neighbourCellType = CalculateCellType(neighbour.x, neighbour.y, neighbour.z);
-        cellsWhereObjectResides |= 1 << neighbourCellType;
+        cellsWhereObjectResides |= (1 << neighbourCellType);
 
         curIndex++;
-    }
-
-    for (j = curIndex; j < 8; j++)
-    {
-        _cellHash[id * 8 + j] = 0xFFFFFFFF;
     }
 
     for (j = 0; j < 8; j++)

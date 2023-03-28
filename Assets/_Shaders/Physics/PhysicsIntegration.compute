@@ -8,6 +8,15 @@ RWStructuredBuffer<float3> _velocityBuffer; // size = DATA_BLOCK_SIZE * THREADS_
 float _velocityDamping;
 float _deltaTime;
 
+float3 ClampBounds(float3 position)
+{
+    return float3(
+        clamp(position.x, 0.001, 40),
+        clamp(position.y, 0.001, 40),
+        clamp(position.z, 0.001, 40)
+        );
+}
+
 [numthreads(THREADS_PER_BLOCK,1,1)]
 void PhysicsIntegration(uint3 tid : SV_DispatchThreadID)
 {
@@ -16,15 +25,17 @@ void PhysicsIntegration(uint3 tid : SV_DispatchThreadID)
     float3 position = _positionBuffer[id];
 
     velocity += 9.8 * _deltaTime * float3(0, -1, 0);
+    // velocity +=  _deltaTime * normalize(float3(30,30,30) - position);
     velocity *= _velocityDamping;
-
+    
     position += velocity * _deltaTime;
-
+    
     if (position.y < 0)
     {
-        velocity = reflect(velocity, float3(0, 1, 0));
-        position = float3(position.x, 0, position.z);
+        velocity = reflect(velocity, float3(0, 1, 0))/2;
     }
+
+    position = ClampBounds(position);
 
     _velocityBuffer[id] = velocity;
     _positionBuffer[id] = position;

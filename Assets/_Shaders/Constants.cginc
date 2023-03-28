@@ -18,3 +18,13 @@ struct AABB
     float3 max;
     float _dummy1;
 };
+
+inline uint mod2(uint v)
+{
+    return v & 1;
+}
+
+uint CalculateCellType(int x, int y, int z)
+{
+    return mod2(x) + mod2(y) * 2 + mod2(z) * 4;
+}
