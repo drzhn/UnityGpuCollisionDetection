@@ -25,12 +25,18 @@ public class GPUCollisionDetectionTest : MonoBehaviour
     private ComputeBuffer _velocityBuffer;
     private ComputeBuffer _hashBuffer;
     private ComputeBuffer _packedCellTypeControlAndIndexBuffer;
+    private ComputeBuffer _changesBuffer;
+    private ComputeBuffer _offsetsBuffer;
 
     private ComputeShader _physicsIntegrationShader;
     private int _physicsIntegrationKernel;
 
     private ComputeShader _cellIdGenerationShader;
     private int _cellIdGenerationKernel;
+
+    private ComputeShader _offsetsGenerationShader;
+    private int _changesGenerationKernel;
+    private int _offsetsGenerationKernel;
 
     private ComputeBufferSorter _sorter;
 
@@ -53,6 +59,8 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         _positionBuffer = new ComputeBuffer(NumObjects, Marshal.SizeOf<Vector3>());
         _velocityBuffer = new ComputeBuffer(NumObjects, Marshal.SizeOf<Vector3>());
         _hashBuffer = new ComputeBuffer(NumObjects * 8, Marshal.SizeOf<uint>());
+        _changesBuffer = new ComputeBuffer(NumObjects * 8, Marshal.SizeOf<uint>());
+        _offsetsBuffer = new ComputeBuffer(NumObjects * 8, Marshal.SizeOf<uint>());
         _packedCellTypeControlAndIndexBuffer = new ComputeBuffer(NumObjects * 8, Marshal.SizeOf<uint>());
 
         Vector3[] data = new Vector3[NumObjects];
@@ -103,19 +111,61 @@ public class GPUCollisionDetectionTest : MonoBehaviour
             _packedCellTypeControlAndIndexBuffer,
             _shaderContainer
         );
+
+        _offsetsGenerationShader = _shaderContainer.Physics.OffsetsGenerationShader;
+        _changesGenerationKernel = _offsetsGenerationShader.FindKernel("ChangesGeneration");
+        _offsetsGenerationKernel = _offsetsGenerationShader.FindKernel("OffsetsGeneration");
+        _offsetsGenerationShader.SetBuffer(_changesGenerationKernel, "_cellHash", _hashBuffer);
+        _offsetsGenerationShader.SetBuffer(_changesGenerationKernel, "_changes", _changesBuffer);
+        _offsetsGenerationShader.SetBuffer(_offsetsGenerationKernel, "_changes", _changesBuffer);
+        _offsetsGenerationShader.SetBuffer(_offsetsGenerationKernel, "_offsets", _offsetsBuffer);
     }
 
-    // private uint[] _testData = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
+    private uint[] _testData = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
+    private uint[] _testData2 = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
+
+    private void TestPrintComputeBuffer(ComputeBuffer buffer)
+    {
+        buffer.GetData(_testData);
+        Debug.Log(Utils.ArrayToString(_testData));
+    }
+
     private void Update()
     {
         _physicsIntegrationShader.SetFloat("_velocityDamping", 1);
         _physicsIntegrationShader.SetFloat("_deltaTime", Time.deltaTime);
         _physicsIntegrationShader.Dispatch(_physicsIntegrationKernel, Constants.DATA_BLOCK_SIZE, 1, 1);
-        
+
         _cellIdGenerationShader.Dispatch(_cellIdGenerationKernel, Constants.DATA_BLOCK_SIZE, 1, 1);
-        
+
         _sorter.Sort();
+        // TestPrintComputeBuffer(_hashBuffer);
+        _offsetsGenerationShader.Dispatch(_changesGenerationKernel, Constants.DATA_BLOCK_SIZE, 1, 1);
+        // TestPrintComputeBuffer(_changesBuffer);
+        _sorter.Scan(_changesBuffer);
+        // TestPrintComputeBuffer(_changesBuffer);
+        _offsetsGenerationShader.Dispatch(_offsetsGenerationKernel, Constants.DATA_BLOCK_SIZE, 1, 1);
+        // TestPrintComputeBuffer(_offsetsBuffer);
         
+        // _hashBuffer.GetData(_testData);
+        // _offsetsBuffer.GetData(_testData2);
+        //
+        // int curIndexOfChange = 1;
+        // for (int i = 1; i < NumObjects; i++)
+        // {
+        //     if (_testData[i] > _testData[i - 1])
+        //     {
+        //         if (_testData2[curIndexOfChange] == i)
+        //         {
+        //             curIndexOfChange++;
+        //         }
+        //         else
+        //         {
+        //             Debug.LogError(i.ToString());
+        //         }
+        //     }
+        // }
+
         Graphics.DrawMeshInstancedIndirect(
             _mesh,
             0,
@@ -132,7 +182,8 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         _argsBuffer.Release();
         _hashBuffer.Release();
         _packedCellTypeControlAndIndexBuffer.Release();
-        
+        _changesBuffer.Release();
+        _offsetsBuffer.Release();
         _sorter.Dispose();
     }
 }

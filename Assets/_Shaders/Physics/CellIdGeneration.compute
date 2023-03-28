@@ -24,9 +24,14 @@ int GetNeighbourOffset(float v)
     return sign(v - middle);
 }
 
+inline uint mod2(uint v)
+{
+    return v & 1;
+}
+
 uint CalculateCellType(int x, int y, int z)
 {
-    return (x % 2) + (y % 2) * 2 + (z % 2) * 4;
+    return mod2(x) + mod2(y) * 2 + mod2(z) * 4;
 }
 
 bool SphereCubeIntersection(float3 cubeMin, float3 cubeMax, float3 sphereCenter, float sphereRadius)
@@ -69,7 +74,7 @@ void CellIdGeneration(uint3 tid : SV_DispatchThreadID)
     int curIndex = 1;
 
     int j = 0;
-    
+
     for (j = 1; j < 8; j++)
     {
         const int3 neighbourOffset = offset * int3((j >> 0) & 1, (j >> 1) & 1, (j >> 2) & 1);

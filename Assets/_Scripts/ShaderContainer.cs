@@ -20,9 +20,11 @@ public class PhysicsShaderContainer
 {
     public ComputeShader PhysicsIntegrationShader => _physicsIntegrationShader;
     public ComputeShader CellIdGenerationShader => _cellIdGenerationShader;
+    public ComputeShader OffsetsGenerationShader => _offsetsGenerationShader;
 
     [SerializeField] private ComputeShader _physicsIntegrationShader;
     [SerializeField] private ComputeShader _cellIdGenerationShader;
+    [SerializeField] private ComputeShader _offsetsGenerationShader;
 }
 
 [Serializable]

@@ -109,10 +109,8 @@ public class ComputeBufferSorter: IDisposable
             _sizesData.DeviceBuffer.GetData(_sizesLocalDataBeforeScan);
             // Debug.Log("Sizes before scan: " + Utils.ArrayToString(_sizesLocalDataBeforeScan));
 
-            _scanShader.Dispatch(_preScanKernel, Constants.BLOCK_SIZE / (Constants.THREADS_PER_BLOCK / Constants.BUCKET_SIZE), 1, 1);
-            _scanShader.Dispatch(_blockSumKernel, 1, 1, 1);
-            _scanShader.Dispatch(_globalScanKernel, Constants.BLOCK_SIZE / (Constants.THREADS_PER_BLOCK / Constants.BUCKET_SIZE), 1, 1);
-
+            Scan(_sizesData.DeviceBuffer);
+            
             _globalRadixSortShader.Dispatch(_globalRadixKernel, Constants.BLOCK_SIZE, 1, 1);
 
             // GetIntermediateDataBack();
@@ -123,6 +121,16 @@ public class ComputeBufferSorter: IDisposable
         // PrintData();
 
         // ValidateSortedData();
+    }
+
+    public void Scan(ComputeBuffer bufferToScan)
+    {
+        _scanShader.SetBuffer(_preScanKernel, "data", bufferToScan);
+        _scanShader.SetBuffer(_globalScanKernel, "data", bufferToScan);
+        
+        _scanShader.Dispatch(_preScanKernel, Constants.BLOCK_SIZE / (Constants.THREADS_PER_BLOCK / Constants.BUCKET_SIZE), 1, 1);
+        _scanShader.Dispatch(_blockSumKernel, 1, 1, 1);
+        _scanShader.Dispatch(_globalScanKernel, Constants.BLOCK_SIZE / (Constants.THREADS_PER_BLOCK / Constants.BUCKET_SIZE), 1, 1);
     }
 
     void GetIntermediateDataBack()
