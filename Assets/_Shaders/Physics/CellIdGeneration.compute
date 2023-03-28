@@ -5,14 +5,14 @@
 StructuredBuffer<float3> _positionBuffer; // size = BLOCK_SIZE * THREADS_PER_BLOCK
 
 // object cell hash. Contains hashes for home cell and phantom cell
-RWStructuredBuffer<uint> _cellHash; // size = BLOCK_SIZE * THREADS_PER_BLOCK * 8
-// here we pack object data: [-- cell type (1)---] [--home cell type(3)--][--cell types where object overlap(8)--] [--object index (20)--]
-RWStructuredBuffer<uint> _packedCellTypeControlAndIndex; // size = BLOCK_SIZE * THREADS_PER_BLOCK * 8
+RWStructuredBuffer<uint> _cellHash; // size = BLOCK_SIZE * THREADS_PER_BLOCK
+// here we pack object data: [-- cell type (1)---] [--home cell type(3)--][--cell types where object resides(8)--] [--object index (20)--]
+RWStructuredBuffer<uint> _packedCellTypeControlAndIndex; // size = BLOCK_SIZE * THREADS_PER_BLOCK
 
 float _sphereDiameter;
 float _cellSize;
 
-uint PackTypeControlAndIndex(uint isHome, uint homeCellType, uint overlappedCellTypes, uint objectIndex)
+uint PackObjectData(uint isHome, uint homeCellType, uint overlappedCellTypes, uint objectIndex)
 {
     return (isHome << 31) | (homeCellType << 28) | (overlappedCellTypes << 20) | (objectIndex << 0);
 }
@@ -105,7 +105,7 @@ void CellIdGeneration(uint3 tid : SV_DispatchThreadID)
 
     for (j = 0; j < 8; j++)
     {
-        _packedCellTypeControlAndIndex[id * 8 + j] = PackTypeControlAndIndex(
+        _packedCellTypeControlAndIndex[id * 8 + j] = PackObjectData(
             j == 0 ? 1 : 0,
             homeCellType,
             cellsWhereObjectResides,

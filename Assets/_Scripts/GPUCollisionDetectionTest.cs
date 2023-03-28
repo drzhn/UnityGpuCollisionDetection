@@ -123,6 +123,7 @@ public class GPUCollisionDetectionTest : MonoBehaviour
 
     private uint[] _testData = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
     private uint[] _testData2 = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
+    private uint[] _testData3 = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
 
     private void TestPrintComputeBuffer(ComputeBuffer buffer)
     {
@@ -139,32 +140,66 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         _cellIdGenerationShader.Dispatch(_cellIdGenerationKernel, Constants.DATA_BLOCK_SIZE, 1, 1);
 
         _sorter.Sort();
+        _hashBuffer.GetData(_testData);
         // TestPrintComputeBuffer(_hashBuffer);
-        _offsetsGenerationShader.Dispatch(_changesGenerationKernel, Constants.DATA_BLOCK_SIZE, 1, 1);
+        for (int i = 1; i < Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK; i++)
+        {
+            if (_testData[i] < _testData[i - 1])
+            {
+                Debug.LogError("error in sorting" + i.ToString());
+                throw new Exception();
+            }
+        }
+
+        _offsetsGenerationShader.Dispatch(_changesGenerationKernel, Constants.BLOCK_SIZE, 1, 1);
+        _changesBuffer.GetData(_testData2);
+        for (int i = 0; i < Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK - 1; i++)
+        {
+            uint value = _testData[i] < _testData[i + 1] ? 1u : 0u;
+            if (_testData2[i] != value)
+            {
+                Debug.LogError("error in changes" + i.ToString());
+                throw new Exception();
+            }
+        }
         // TestPrintComputeBuffer(_changesBuffer);
+
         _sorter.Scan(_changesBuffer);
+        _changesBuffer.GetData(_testData3);
+        uint accumulatedValue = 0;
+        for (int i = 1; i < Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK; i++)
+        {
+            accumulatedValue += _testData2[i - 1];
+            if (_testData3[i] != accumulatedValue)
+            {
+                Debug.LogError("error in scan" + i.ToString());
+                throw new Exception();
+            }
+        }
+
         // TestPrintComputeBuffer(_changesBuffer);
-        _offsetsGenerationShader.Dispatch(_offsetsGenerationKernel, Constants.DATA_BLOCK_SIZE, 1, 1);
+        _offsetsGenerationShader.Dispatch(_offsetsGenerationKernel, Constants.BLOCK_SIZE, 1, 1);
         // TestPrintComputeBuffer(_offsetsBuffer);
-        
-        // _hashBuffer.GetData(_testData);
-        // _offsetsBuffer.GetData(_testData2);
-        //
-        // int curIndexOfChange = 1;
-        // for (int i = 1; i < NumObjects; i++)
-        // {
-        //     if (_testData[i] > _testData[i - 1])
-        //     {
-        //         if (_testData2[curIndexOfChange] == i)
-        //         {
-        //             curIndexOfChange++;
-        //         }
-        //         else
-        //         {
-        //             Debug.LogError(i.ToString());
-        //         }
-        //     }
-        // }
+
+        _hashBuffer.GetData(_testData);
+        _offsetsBuffer.GetData(_testData2);
+
+        int curIndexOfChange = 1;
+        for (int i = 1; i < Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK; i++)
+        {
+            if (_testData[i] > _testData[i - 1])
+            {
+                if (_testData2[curIndexOfChange] == i)
+                {
+                    curIndexOfChange++;
+                }
+                else
+                {
+                    Debug.LogError(i.ToString());
+                    throw new Exception();
+                }
+            }
+        }
 
         Graphics.DrawMeshInstancedIndirect(
             _mesh,
