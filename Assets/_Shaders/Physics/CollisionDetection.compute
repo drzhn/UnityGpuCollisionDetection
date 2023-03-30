@@ -3,7 +3,6 @@
 #include <Assets/_Shaders/Constants.cginc>
 
 RWStructuredBuffer<float3> _positionBuffer; // size = DATA_BLOCK_SIZE * THREADS_PER_BLOCK
-RWStructuredBuffer<float3> _temporaryPositions; // size = DATA_BLOCK_SIZE * THREADS_PER_BLOCK
 
 StructuredBuffer<uint> _cellHash; // size = BLOCK_SIZE * THREADS_PER_BLOCK
 StructuredBuffer<uint> _packedCellTypeControlAndIndex; // size = BLOCK_SIZE * THREADS_PER_BLOCK
@@ -13,6 +12,7 @@ StructuredBuffer<uint> _offsets; // size = BLOCK_SIZE * THREADS_PER_BLOCK
 uint _currentCellType;
 uint _numOverlaps;
 uint _numOffsets;
+float _deltaTime;
 
 #define DIAMETER 1
 
@@ -51,17 +51,10 @@ void CheckCollision(uint index, uint id2)
     const float desiredDistance = DIAMETER;
     if (currentDistance < desiredDistance)
     {
-        // float3 dir = normalize(objectPos - collisionPos) * (desiredDistance - currentDistance) / 2;
-        // // float k =  0.5;
-        // // _positionBuffer[index] -= k * 0.95 * dir;
-        // _temporaryPositions[index] = ClampBounds(_temporaryPositions[index] + dir * 0.8);
-        // _temporaryPositions[id2] = ClampBounds(_temporaryPositions[id2] - dir * 0.8);
+        const float3 dir = normalize(objectPos - collisionPos) * (desiredDistance - currentDistance) * 0.5;
 
-
-        float3 dir = (currentDistance - desiredDistance) / currentDistance * (objectPos - collisionPos);
-        float k = 0.5;//_pointsDataBuffer[index].mass / (_pointsDataBuffer[index].mass + _pointsDataBuffer[j].mass);
-        _positionBuffer[index] -= k  * dir * 0.95;
-        _positionBuffer[id2] += k  * dir * 0.95;
+        _positionBuffer[index] += dir * 15 * _deltaTime;
+        _positionBuffer[id2] -= dir * 15 * _deltaTime;
     }
 }
 
@@ -76,7 +69,7 @@ void CollisionDetection(uint3 tid : SV_DispatchThreadID)
 
     const uint offsetStart = _offsets[id];
     const uint offsetEnd = _offsets[id + 1];
-    if (offsetEnd - offsetStart <= 1)
+    if (offsetEnd - offsetStart <= 1)// || offsetEnd - offsetStart > 50)
     {
         return;
     }

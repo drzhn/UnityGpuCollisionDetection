@@ -11,20 +11,12 @@
 
 #define MAX_FLOAT 0x7F7FFFFF
 
-struct AABB
-{
-    float3 min;
-    float _dummy0;
-    float3 max;
-    float _dummy1;
-};
-
 inline uint mod2(uint v)
 {
     return v & 1;
 }
 
-uint CalculateCellType(int x, int y, int z)
+uint CalculateCellType(uint x, uint y, uint z)
 {
     return mod2(x) + mod2(y) * 2 + mod2(z) * 4;
 }
@@ -32,8 +24,8 @@ uint CalculateCellType(int x, int y, int z)
 float3 ClampBounds(float3 position)
 {
     return float3(
-        clamp(position.x, 0.001, 100),
-        clamp(position.y, 0.001, 100),
-        clamp(position.z, 0.001, 100)
+        clamp(position.x, 0.001, 40),
+        clamp(position.y, 0.001, 40),
+        clamp(position.z, 0.001, 40)
     );
 }

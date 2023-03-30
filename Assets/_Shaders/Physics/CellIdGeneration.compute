@@ -53,14 +53,14 @@ void CellIdGeneration(uint3 tid : SV_DispatchThreadID)
         _cellHash[id * 8 + j] = 0xFFFFFFFF;
     }
 
-    float3 cellPos = position / _cellSize;
+    const float3 cellPos = position / _cellSize;
 
-    int3 cellId = int3(floor(clamp(cellPos.x, 0, 1024)), floor(clamp(cellPos.y, 0, 1024)), floor(clamp(cellPos.z, 0, 1024)));
+    uint3 cellId = uint3(floor(cellPos.x), floor(cellPos.y), floor(cellPos.z));
 
     _cellHash[id * 8 + 0] = (cellId.x << XSHIFT) | (cellId.y << YSHIFT) | (cellId.z << ZSHIFT);
     const uint homeCellType = CalculateCellType(cellId.x, cellId.y, cellId.z);
 
-    uint cellsWhereObjectResides = 1 << homeCellType;
+    uint cellsWhereObjectResides = (1 << homeCellType);
 
     const int3 offset = int3(
         GetNeighbourOffset(cellPos.x),
@@ -96,7 +96,7 @@ void CellIdGeneration(uint3 tid : SV_DispatchThreadID)
     for (j = 0; j < 8; j++)
     {
         _packedCellTypeControlAndIndex[id * 8 + j] = PackObjectData(
-            j == 0 ? 1 : 0,
+            (j == 0) ? 1 : 0,
             homeCellType,
             cellsWhereObjectResides,
             id

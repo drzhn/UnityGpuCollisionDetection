@@ -9,13 +9,14 @@ using Random = UnityEngine.Random;
 
 public class GPUCollisionDetectionTest : MonoBehaviour
 {
+    [SerializeField] [Range(0, 1)] private float _velocityDamping = 1;
     [SerializeField] private ShaderContainer _shaderContainer;
     [SerializeField] private Material _instancedMaterial;
     [SerializeField] private Mesh _mesh;
 
     private const int NumPerSide = 32;
+
     private const int NumObjects = NumPerSide * NumPerSide * NumPerSide;
-    // private const int NumObjects = 5;
 
     private const float SphereDiameter = 1;
     private const float CellSize = SphereDiameter * 1.41421356f;
@@ -23,8 +24,9 @@ public class GPUCollisionDetectionTest : MonoBehaviour
     private ComputeBuffer _argsBuffer;
 
     private ComputeBuffer _positionBuffer;
-    private ComputeBuffer _temporaryPositionBuffer;
-    private ComputeBuffer _velocityBuffer;
+
+    private ComputeBuffer _prevPositionsBuffer;
+
     private ComputeBuffer _hashBuffer;
     private ComputeBuffer _packedCellTypeControlAndIndexBuffer;
     private ComputeBuffer _changesBuffer;
@@ -47,15 +49,17 @@ public class GPUCollisionDetectionTest : MonoBehaviour
     private ComputeShader _collisionDetectionShader;
     private int _collisionDetectionKernel;
 
+    private ComputeShader _postCollisionUpdateShader;
+    private int _postCollisionUpdateKernel;
+
     private ComputeBufferSorter _sorter;
 
     private void Awake()
     {
-        // if (NumObjects != Constants.THREADS_PER_BLOCK * Constants.DATA_BLOCK_SIZE)
-        // {
-        //     throw new Exception();
-        // }
-
+        if (NumObjects != Constants.THREADS_PER_BLOCK * Constants.DATA_BLOCK_SIZE)
+        {
+            throw new Exception();
+        }
         int[] args = new int[5] { 0, 0, 0, 0, 0 };
         _argsBuffer = new ComputeBuffer(1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
         args[0] = (int)_mesh.GetIndexCount(0);
@@ -66,8 +70,7 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         _argsBuffer.SetData(args);
 
         _positionBuffer = new ComputeBuffer(NumObjects, Marshal.SizeOf<Vector3>());
-        _temporaryPositionBuffer = new ComputeBuffer(NumObjects, Marshal.SizeOf<Vector3>());
-        _velocityBuffer = new ComputeBuffer(NumObjects, Marshal.SizeOf<Vector3>());
+        _prevPositionsBuffer = new ComputeBuffer(NumObjects, Marshal.SizeOf<Vector3>());
         _hashBuffer = new ComputeBuffer(NumObjects * 8, Marshal.SizeOf<uint>());
         _changesBuffer = new ComputeBuffer(NumObjects * 8, Marshal.SizeOf<uint>());
         _offsetsBuffer = new ComputeBuffer(NumObjects * 8, Marshal.SizeOf<uint>());
@@ -83,34 +86,21 @@ public class GPUCollisionDetectionTest : MonoBehaviour
                 for (int k = 0; k < NumPerSide; k++)
                 {
                     data[i * NumPerSide * NumPerSide + j * NumPerSide + k] =
-                        new Vector3(i, k, j)  + Vector3.one * 3 +
+                        new Vector3(i, k, j) + Vector3.one * 3 +
                         new Vector3(Random.Range(0.1f, 0.3f), Random.Range(0.1f, 0.3f), Random.Range(0.1f, 0.3f));
                 }
             }
         }
+
         _positionBuffer.SetData(data);
-        _temporaryPositionBuffer.SetData(data);
-
-        for (int i = 0; i < NumPerSide; i++)
-        {
-            for (int j = 0; j < NumPerSide; j++)
-            {
-                for (int k = 0; k < NumPerSide; k++)
-                {
-                    data[i * NumPerSide * NumPerSide + j * NumPerSide + k] = Vector3.zero;
-                }
-            }
-        }
-
-        _velocityBuffer.SetData(data);
+        _prevPositionsBuffer.SetData(data);
 
         _instancedMaterial.SetBuffer("_positionBuffer", _positionBuffer);
 
         _physicsIntegrationShader = _shaderContainer.Physics.PhysicsIntegrationShader;
         _physicsIntegrationKernel = _physicsIntegrationShader.FindKernel("PhysicsIntegration");
         _physicsIntegrationShader.SetBuffer(_physicsIntegrationKernel, "_positionBuffer", _positionBuffer);
-        _physicsIntegrationShader.SetBuffer(_physicsIntegrationKernel, "_velocityBuffer", _velocityBuffer);
-        _physicsIntegrationShader.SetBuffer(_physicsIntegrationKernel, "_temporaryPositions", _temporaryPositionBuffer);
+        _physicsIntegrationShader.SetBuffer(_physicsIntegrationKernel, "_prevPositions", _prevPositionsBuffer);
 
         _cellIdGenerationShader = _shaderContainer.Physics.CellIdGenerationShader;
         _cellIdGenerationKernel = _cellIdGenerationShader.FindKernel("CellIdGeneration");
@@ -140,31 +130,42 @@ public class GPUCollisionDetectionTest : MonoBehaviour
 
         _collisionDetectionShader = _shaderContainer.Physics.CollisionDetectionShader;
         _collisionDetectionKernel = _collisionDetectionShader.FindKernel("CollisionDetection");
-
         _collisionDetectionShader.SetBuffer(_collisionDetectionKernel, "_positionBuffer", _positionBuffer);
-        _collisionDetectionShader.SetBuffer(_collisionDetectionKernel, "_temporaryPositions", _temporaryPositionBuffer);
         _collisionDetectionShader.SetBuffer(_collisionDetectionKernel, "_cellHash", _hashBuffer);
         _collisionDetectionShader.SetBuffer(_collisionDetectionKernel, "_packedCellTypeControlAndIndex", _packedCellTypeControlAndIndexBuffer);
         _collisionDetectionShader.SetBuffer(_collisionDetectionKernel, "_offsets", _offsetsBuffer);
+
+        _postCollisionUpdateShader = _shaderContainer.Physics.PostCollisionUpdateShader;
+        _postCollisionUpdateKernel = _postCollisionUpdateShader.FindKernel("PostCollisionUpdate");
+        _postCollisionUpdateShader.SetBuffer(_postCollisionUpdateKernel, "_positionBuffer", _positionBuffer);
+
+        _prevDeltaTime = Time.deltaTime;
     }
 
-    private uint[] _sortedHashData = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
-    private uint[] _sortedObjectData = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
-    private uint[] _offsetsData = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
-    private uint[] _changesData = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
-    private Vector3[] _positionsData = new Vector3[Constants.THREADS_PER_BLOCK * Constants.DATA_BLOCK_SIZE];
-    private uint[] _testData3 = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
+    #region Test data arrays for debug purposes
 
-    private void TestPrintComputeBuffer(ComputeBuffer buffer)
-    {
-        buffer.GetData(_sortedHashData);
-        Debug.Log(Utils.ArrayToString(_sortedHashData));
-    }
+    // private uint[] _sortedHashData = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
+    // private uint[] _sortedObjectData = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
+    // private uint[] _offsetsData = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
+    // private uint[] _changesData = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
+    // private Vector3[] _positionsData = new Vector3[Constants.THREADS_PER_BLOCK * Constants.DATA_BLOCK_SIZE];
+    // private uint[] _testData3 = new uint[Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK];
+
+    // private void TestPrintComputeBuffer(ComputeBuffer buffer)
+    // {
+    //     buffer.GetData(_sortedHashData);
+    //     Debug.Log(Utils.ArrayToString(_sortedHashData));
+    // }
+
+    #endregion
+
+    private float _prevDeltaTime = 0;
 
     private void Update()
     {
-        _physicsIntegrationShader.SetFloat("_velocityDamping", 1);
+        _physicsIntegrationShader.SetFloat("_velocityDamping", _velocityDamping);
         _physicsIntegrationShader.SetFloat("_deltaTime", Time.deltaTime);
+        _physicsIntegrationShader.SetFloat("_prevDeltaTime", _prevDeltaTime);
         _physicsIntegrationShader.Dispatch(_physicsIntegrationKernel, Constants.DATA_BLOCK_SIZE, 1, 1);
 
         _cellIdGenerationShader.Dispatch(_cellIdGenerationKernel, Constants.DATA_BLOCK_SIZE, 1, 1);
@@ -179,14 +180,15 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         _offsetsGenerationShader.Dispatch(_offsetsGenerationKernel, Constants.BLOCK_SIZE, 1, 1);
         _numOffsetsBuffer.GetData(_numOffsets);
 
-        _hashBuffer.GetData(_sortedHashData);
-        _packedCellTypeControlAndIndexBuffer.GetData(_sortedObjectData);
-        _offsetsBuffer.GetData(_offsetsData);
-        _positionBuffer.GetData(_positionsData);
-        _changesBuffer.GetData(_changesData);
+        #region hash and offsets validation
 
-        // {
-        //     // hash and offsets validation
+        // { 
+        //    
+        //     _hashBuffer.GetData(_sortedHashData);
+        //     _packedCellTypeControlAndIndexBuffer.GetData(_sortedObjectData);
+        //     _offsetsBuffer.GetData(_offsetsData);
+        //     _positionBuffer.GetData(_positionsData);
+        //     _changesBuffer.GetData(_changesData);
         //     int curIndexOfChange = 1;
         //     for (int i = 1; i < Constants.BLOCK_SIZE * Constants.THREADS_PER_BLOCK; i++)
         //     {
@@ -211,15 +213,19 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         //     }
         // }
 
+        #endregion
 
+        _collisionDetectionShader.SetFloat("_deltaTime", Time.deltaTime);
         for (uint i = 0; i < 8; i++)
         {
             _collisionDetectionShader.SetInt("_currentCellType", (int)i);
             _collisionDetectionShader.SetInt("_numOverlaps", _numOverlaps[0] + 1);
-            _collisionDetectionShader.SetInt("_numOffsets", _numOffsets[0]+1);
+            _collisionDetectionShader.SetInt("_numOffsets", _numOffsets[0] + 1);
             // ValidateCollisionAlgorithm(i, _numOverlaps[0] + 1, _numOffsets[0]);
             _collisionDetectionShader.Dispatch(_changesGenerationKernel, Constants.BLOCK_SIZE, 1, 1);
         }
+
+        _postCollisionUpdateShader.Dispatch(_postCollisionUpdateKernel, Constants.DATA_BLOCK_SIZE, 1, 1);
 
         Graphics.DrawMeshInstancedIndirect(
             _mesh,
@@ -228,119 +234,14 @@ public class GPUCollisionDetectionTest : MonoBehaviour
             new Bounds(Vector3.zero, Vector3.one * 1000),
             _argsBuffer
         );
-    }
 
-    struct ObjectData
-    {
-        public bool isHome;
-        public uint cellType;
-        public uint controlBits;
-        public uint objectIndex;
-    };
-
-    ObjectData UnpackObjectData(uint packed)
-    {
-        ObjectData data = new ObjectData
-        {
-            isHome = ((packed >> 31) & ((1 << 1) - 1)) == 1,
-            cellType = (packed >> 28) & ((1 << 3) - 1),
-            controlBits = (packed >> 20) & ((1 << 8) - 1),
-            objectIndex = (packed >> 0) & ((1 << 20) - 1),
-        };
-        return data;
-    }
-
-    uint mod2(uint v)
-    {
-        return v & 1;
-    }
-
-    uint CalculateCellType(uint x, uint y, uint z)
-    {
-        return mod2(x) + mod2(y) * 2 + mod2(z) * 4;
-    }
-
-    uint GetCellType(uint hash)
-    {
-        uint x = (hash >> 20) & ((1 << 10) - 1);
-        uint y = (hash >> 10) & ((1 << 10) - 1);
-        uint z = (hash >> 0) & ((1 << 10) - 1);
-
-        return CalculateCellType(x, y, z);
-    }
-
-    void CheckCollision(uint index, uint id2)
-    {
-        // _positionBuffer[index]  = float3(0,0,0);
-        // _positionBuffer[id2]  = float3(0,1,0);
-        // return;
-        Vector3 objectPos = _positionsData[index];
-        Vector3 collisionPos = _positionsData[id2];
-        float currentDistance = Vector3.Distance(collisionPos, objectPos);
-        float desiredDistance = 1;
-        if (currentDistance < desiredDistance)
-        {
-            Vector3 dir = (objectPos - collisionPos).normalized * (desiredDistance - currentDistance) / 2;
-            // float k =  0.5;
-            // _positionBuffer[index] -= k * 0.95 * dir;
-            // _positionBuffer[index] += dir;
-        }
-    }
-
-
-    void ValidateCollisionAlgorithm(uint cellType, int numOverlaps, int numOffsets)
-    {
-        for (uint id = 0; id < Constants.THREADS_PER_BLOCK * Constants.BLOCK_SIZE; id++)
-        {
-            if (id >= numOffsets)
-            {
-                continue;
-            }
-
-            uint offsetStart = _offsetsData[id];
-            uint offsetEnd = _offsetsData[id + 1];
-            if (offsetEnd - offsetStart <= 1)
-            {
-                continue;
-            }
-
-            bool homeEnded = false;
-            
-            uint cellId1 = _sortedHashData[offsetStart];
-            
-            if (cellId1 == 0xFFFFFFFF || GetCellType(cellId1) != cellType)
-            {
-                continue;
-            }
-            
-            for (uint i = offsetStart; i < offsetEnd - 1; i++)
-            {
-                ObjectData data1 = UnpackObjectData(_sortedObjectData[i]);
-                if (!data1.isHome)
-                {
-                    homeEnded = true;
-                }
-
-                if (data1.isHome && homeEnded)
-                {
-                    throw new Exception("WTF");
-                }
-
-                if (homeEnded) continue;
-                for (uint j = i + 1; j < offsetEnd; j++)
-                {
-                    ObjectData data2 = UnpackObjectData(_sortedObjectData[j]);
-
-                    CheckCollision(data1.objectIndex, data2.objectIndex);
-                }
-            }
-        }
+        _prevDeltaTime = Time.deltaTime;
     }
 
     private void OnDestroy()
     {
         _positionBuffer.Release();
-        _velocityBuffer.Release();
+        _prevPositionsBuffer.Release();
         _argsBuffer.Release();
         _hashBuffer.Release();
         _packedCellTypeControlAndIndexBuffer.Release();

@@ -3,33 +3,24 @@
 #include <Assets/_Shaders/Constants.cginc>
 
 RWStructuredBuffer<float3> _positionBuffer; // size = DATA_BLOCK_SIZE * THREADS_PER_BLOCK
-RWStructuredBuffer<float3> _velocityBuffer; // size = DATA_BLOCK_SIZE * THREADS_PER_BLOCK
-RWStructuredBuffer<float3> _temporaryPositions; // size = DATA_BLOCK_SIZE * THREADS_PER_BLOCK
+RWStructuredBuffer<float3> _prevPositions; // size = DATA_BLOCK_SIZE * THREADS_PER_BLOCK
 
 float _velocityDamping;
 float _deltaTime;
+float _prevDeltaTime;
 
 [numthreads(THREADS_PER_BLOCK,1,1)]
 void PhysicsIntegration(uint3 tid : SV_DispatchThreadID)
 {
     const uint id = tid.x;
-    float3 velocity = _velocityBuffer[id];
-    float3 position = _positionBuffer[id];
-
+    const float3 prevPosition = _prevPositions[id];
+    const float3 newPosition = _positionBuffer[id];
+    
+    float3 velocity = (newPosition - prevPosition) / _prevDeltaTime;
+    
     velocity += 9.8 * _deltaTime * float3(0, -1, 0);
-    // velocity += _deltaTime * normalize(float3(20 , 20, 20) - position);
     velocity *= _velocityDamping;
 
-
-    if (position.y < 0)
-    {
-        velocity = reflect(velocity, float3(0, 1, 0)) / 2;
-    }
-
-    position += velocity * _deltaTime;
-    position = ClampBounds(position);
-
-    _velocityBuffer[id] = velocity;
-    _positionBuffer[id] = position;
-    _temporaryPositions[id] = position;
+    _positionBuffer[id] =  newPosition + velocity * _deltaTime;
+    _prevPositions[id] = newPosition;
 }

@@ -238,14 +238,14 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 331213038}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 20, y: 20, z: -56.2}
+  m_LocalRotation: {x: 0.20819904, y: 0.28834164, z: -0.06438493, w: 0.9323985}
+  m_LocalPosition: {x: -14.6, y: 47.2, z: -34}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 25.175, y: 34.368, z: 0}
 --- !u!1 &594987707
 GameObject:
   m_ObjectHideFlags: 0
@@ -307,6 +307,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7981e345549dcea418aaca1fc2042b9b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _velocityDamping: 0.99
   _shaderContainer: {fileID: 1004892779}
   _instancedMaterial: {fileID: 2100000, guid: 382e2fac13ed8bc409fe4027870dc07e, type: 2}
   _mesh: {fileID: 2540817853737639666, guid: 56dc91c77f2b47443a3c2fdf440090f4, type: 3}
@@ -346,6 +347,7 @@ MonoBehaviour:
     _cellIdGenerationShader: {fileID: 7200000, guid: 02650fd8086fe6b4f8bde118853fc2fe, type: 3}
     _offsetsGenerationShader: {fileID: 7200000, guid: 611cc3907ac184f42bde97be31d670f6, type: 3}
     _collisionDetectionShader: {fileID: 7200000, guid: d7f3b240169c27348a065fcd08b7eb80, type: 3}
+    _postCollisionUpdateShader: {fileID: 7200000, guid: 7de34964f3e9797429b21e342c5f7769, type: 3}
 --- !u!1 &1095061538
 GameObject:
   m_ObjectHideFlags: 0

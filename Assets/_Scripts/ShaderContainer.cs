@@ -22,11 +22,13 @@ public class PhysicsShaderContainer
     public ComputeShader CellIdGenerationShader => _cellIdGenerationShader;
     public ComputeShader OffsetsGenerationShader => _offsetsGenerationShader;
     public ComputeShader CollisionDetectionShader => _collisionDetectionShader;
+    public ComputeShader PostCollisionUpdateShader => _postCollisionUpdateShader;
 
     [SerializeField] private ComputeShader _physicsIntegrationShader;
     [SerializeField] private ComputeShader _cellIdGenerationShader;
     [SerializeField] private ComputeShader _offsetsGenerationShader;
     [SerializeField] private ComputeShader _collisionDetectionShader;
+    [SerializeField] private ComputeShader _postCollisionUpdateShader;
 }
 
 [Serializable]
