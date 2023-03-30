@@ -28,3 +28,12 @@ uint CalculateCellType(int x, int y, int z)
 {
     return mod2(x) + mod2(y) * 2 + mod2(z) * 4;
 }
+
+float3 ClampBounds(float3 position)
+{
+    return float3(
+        clamp(position.x, 0.001, 100),
+        clamp(position.y, 0.001, 100),
+        clamp(position.z, 0.001, 100)
+    );
+}

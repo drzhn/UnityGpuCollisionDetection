@@ -23,6 +23,7 @@ public class GPUCollisionDetectionTest : MonoBehaviour
     private ComputeBuffer _argsBuffer;
 
     private ComputeBuffer _positionBuffer;
+    private ComputeBuffer _temporaryPositionBuffer;
     private ComputeBuffer _velocityBuffer;
     private ComputeBuffer _hashBuffer;
     private ComputeBuffer _packedCellTypeControlAndIndexBuffer;
@@ -65,6 +66,7 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         _argsBuffer.SetData(args);
 
         _positionBuffer = new ComputeBuffer(NumObjects, Marshal.SizeOf<Vector3>());
+        _temporaryPositionBuffer = new ComputeBuffer(NumObjects, Marshal.SizeOf<Vector3>());
         _velocityBuffer = new ComputeBuffer(NumObjects, Marshal.SizeOf<Vector3>());
         _hashBuffer = new ComputeBuffer(NumObjects * 8, Marshal.SizeOf<uint>());
         _changesBuffer = new ComputeBuffer(NumObjects * 8, Marshal.SizeOf<uint>());
@@ -87,6 +89,7 @@ public class GPUCollisionDetectionTest : MonoBehaviour
             }
         }
         _positionBuffer.SetData(data);
+        _temporaryPositionBuffer.SetData(data);
 
         for (int i = 0; i < NumPerSide; i++)
         {
@@ -107,6 +110,7 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         _physicsIntegrationKernel = _physicsIntegrationShader.FindKernel("PhysicsIntegration");
         _physicsIntegrationShader.SetBuffer(_physicsIntegrationKernel, "_positionBuffer", _positionBuffer);
         _physicsIntegrationShader.SetBuffer(_physicsIntegrationKernel, "_velocityBuffer", _velocityBuffer);
+        _physicsIntegrationShader.SetBuffer(_physicsIntegrationKernel, "_temporaryPositions", _temporaryPositionBuffer);
 
         _cellIdGenerationShader = _shaderContainer.Physics.CellIdGenerationShader;
         _cellIdGenerationKernel = _cellIdGenerationShader.FindKernel("CellIdGeneration");
@@ -138,6 +142,7 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         _collisionDetectionKernel = _collisionDetectionShader.FindKernel("CollisionDetection");
 
         _collisionDetectionShader.SetBuffer(_collisionDetectionKernel, "_positionBuffer", _positionBuffer);
+        _collisionDetectionShader.SetBuffer(_collisionDetectionKernel, "_temporaryPositions", _temporaryPositionBuffer);
         _collisionDetectionShader.SetBuffer(_collisionDetectionKernel, "_cellHash", _hashBuffer);
         _collisionDetectionShader.SetBuffer(_collisionDetectionKernel, "_packedCellTypeControlAndIndex", _packedCellTypeControlAndIndexBuffer);
         _collisionDetectionShader.SetBuffer(_collisionDetectionKernel, "_offsets", _offsetsBuffer);
@@ -211,8 +216,8 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         {
             _collisionDetectionShader.SetInt("_currentCellType", (int)i);
             _collisionDetectionShader.SetInt("_numOverlaps", _numOverlaps[0] + 1);
-            _collisionDetectionShader.SetInt("_numOffsets", _numOffsets[0]);
-            //ValidateCollisionAlgorithm(i, _numOverlaps[0] + 1, _numOffsets[0]);
+            _collisionDetectionShader.SetInt("_numOffsets", _numOffsets[0]+1);
+            // ValidateCollisionAlgorithm(i, _numOverlaps[0] + 1, _numOffsets[0]);
             _collisionDetectionShader.Dispatch(_changesGenerationKernel, Constants.BLOCK_SIZE, 1, 1);
         }
 
@@ -299,20 +304,29 @@ public class GPUCollisionDetectionTest : MonoBehaviour
                 continue;
             }
 
+            bool homeEnded = false;
+            
+            uint cellId1 = _sortedHashData[offsetStart];
+            
+            if (cellId1 == 0xFFFFFFFF || GetCellType(cellId1) != cellType)
+            {
+                continue;
+            }
+            
             for (uint i = offsetStart; i < offsetEnd - 1; i++)
             {
-                uint cellId1 = _sortedHashData[i];
-                if (cellId1 == 0xFFFFFFFF || GetCellType(cellId1) != cellType)
-                {
-                    break;
-                }
-
                 ObjectData data1 = UnpackObjectData(_sortedObjectData[i]);
                 if (!data1.isHome)
                 {
-                    break;
+                    homeEnded = true;
                 }
 
+                if (data1.isHome && homeEnded)
+                {
+                    throw new Exception("WTF");
+                }
+
+                if (homeEnded) continue;
                 for (uint j = i + 1; j < offsetEnd; j++)
                 {
                     ObjectData data2 = UnpackObjectData(_sortedObjectData[j]);

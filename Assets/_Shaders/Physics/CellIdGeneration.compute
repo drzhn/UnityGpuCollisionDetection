@@ -52,11 +52,10 @@ void CellIdGeneration(uint3 tid : SV_DispatchThreadID)
     {
         _cellHash[id * 8 + j] = 0xFFFFFFFF;
     }
-    
 
     float3 cellPos = position / _cellSize;
 
-    int3 cellId = int3(floor(cellPos.x), floor(cellPos.y), floor(cellPos.z));
+    int3 cellId = int3(floor(clamp(cellPos.x, 0, 1024)), floor(clamp(cellPos.y, 0, 1024)), floor(clamp(cellPos.z, 0, 1024)));
 
     _cellHash[id * 8 + 0] = (cellId.x << XSHIFT) | (cellId.y << YSHIFT) | (cellId.z << ZSHIFT);
     const uint homeCellType = CalculateCellType(cellId.x, cellId.y, cellId.z);

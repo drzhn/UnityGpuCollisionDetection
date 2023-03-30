@@ -3,6 +3,7 @@
 #include <Assets/_Shaders/Constants.cginc>
 
 RWStructuredBuffer<float3> _positionBuffer; // size = DATA_BLOCK_SIZE * THREADS_PER_BLOCK
+RWStructuredBuffer<float3> _temporaryPositions; // size = DATA_BLOCK_SIZE * THREADS_PER_BLOCK
 
 StructuredBuffer<uint> _cellHash; // size = BLOCK_SIZE * THREADS_PER_BLOCK
 StructuredBuffer<uint> _packedCellTypeControlAndIndex; // size = BLOCK_SIZE * THREADS_PER_BLOCK
@@ -50,15 +51,17 @@ void CheckCollision(uint index, uint id2)
     const float desiredDistance = DIAMETER;
     if (currentDistance < desiredDistance)
     {
-        float3 dir = normalize(objectPos - collisionPos) * (desiredDistance-currentDistance)/2;
-        // float k =  0.5;
-        // _positionBuffer[index] -= k * 0.95 * dir;
-        _positionBuffer[index] += dir;
-        _positionBuffer[id2] -= dir;
+        // float3 dir = normalize(objectPos - collisionPos) * (desiredDistance - currentDistance) / 2;
+        // // float k =  0.5;
+        // // _positionBuffer[index] -= k * 0.95 * dir;
+        // _temporaryPositions[index] = ClampBounds(_temporaryPositions[index] + dir * 0.8);
+        // _temporaryPositions[id2] = ClampBounds(_temporaryPositions[id2] - dir * 0.8);
 
-        // float3 dir = (currentDistance - desiredDistance) / currentDistance * (objectPos - collisionPos);
-        // float k = 0.5;//_pointsDataBuffer[index].mass / (_pointsDataBuffer[index].mass + _pointsDataBuffer[j].mass);
-        // _positionBuffer[index] -= k * 0.95 * dir;
+
+        float3 dir = (currentDistance - desiredDistance) / currentDistance * (objectPos - collisionPos);
+        float k = 0.5;//_pointsDataBuffer[index].mass / (_pointsDataBuffer[index].mass + _pointsDataBuffer[j].mass);
+        _positionBuffer[index] -= k  * dir * 0.95;
+        _positionBuffer[id2] += k  * dir * 0.95;
     }
 }
 
@@ -70,30 +73,31 @@ void CollisionDetection(uint3 tid : SV_DispatchThreadID)
     {
         return;
     }
-    
+
     const uint offsetStart = _offsets[id];
     const uint offsetEnd = _offsets[id + 1];
     if (offsetEnd - offsetStart <= 1)
     {
         return;
     }
+
+    const uint cellId1 = _cellHash[offsetStart];
+    if (cellId1 == 0xFFFFFFFF || GetCellType(cellId1) != _currentCellType)
+    {
+        return;
+    }
     for (uint i = offsetStart; i < offsetEnd - 1; i++)
     {
-        const uint cellId1 = _cellHash[i];
-        if (cellId1 == 0xFFFFFFFF || GetCellType(cellId1) != _currentCellType)
-        {
-            return;
-        }
         const ObjectData data1 = UnpackObjectData(_packedCellTypeControlAndIndex[i]);
         if (!data1.isHome)
         {
-            continue;;
+            continue;
         }
 
         for (uint j = i + 1; j < offsetEnd; j++)
         {
             const ObjectData data2 = UnpackObjectData(_packedCellTypeControlAndIndex[j]);
-        
+
             CheckCollision(data1.objectIndex, data2.objectIndex);
         }
     }
