@@ -10,6 +10,7 @@ using Random = UnityEngine.Random;
 public class GPUCollisionDetectionTest : MonoBehaviour
 {
     [SerializeField] [Range(0, 1)] private float _velocityDamping = 1;
+    [SerializeField] [Range(5, 60)] private float _collisionStiffness = 15;
     [SerializeField] private ShaderContainer _shaderContainer;
     [SerializeField] private Material _instancedMaterial;
     [SerializeField] private Mesh _mesh;
@@ -60,6 +61,7 @@ public class GPUCollisionDetectionTest : MonoBehaviour
         {
             throw new Exception();
         }
+
         int[] args = new int[5] { 0, 0, 0, 0, 0 };
         _argsBuffer = new ComputeBuffer(1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
         args[0] = (int)_mesh.GetIndexCount(0);
@@ -221,6 +223,7 @@ public class GPUCollisionDetectionTest : MonoBehaviour
             _collisionDetectionShader.SetInt("_currentCellType", (int)i);
             _collisionDetectionShader.SetInt("_numOverlaps", _numOverlaps[0] + 1);
             _collisionDetectionShader.SetInt("_numOffsets", _numOffsets[0] + 1);
+            _collisionDetectionShader.SetFloat("_collisionStiffness", _collisionStiffness);
             // ValidateCollisionAlgorithm(i, _numOverlaps[0] + 1, _numOffsets[0]);
             _collisionDetectionShader.Dispatch(_changesGenerationKernel, Constants.BLOCK_SIZE, 1, 1);
         }

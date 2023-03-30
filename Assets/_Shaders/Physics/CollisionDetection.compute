@@ -13,6 +13,7 @@ uint _currentCellType;
 uint _numOverlaps;
 uint _numOffsets;
 float _deltaTime;
+float _collisionStiffness;
 
 #define DIAMETER 1
 
@@ -53,8 +54,8 @@ void CheckCollision(uint index, uint id2)
     {
         const float3 dir = normalize(objectPos - collisionPos) * (desiredDistance - currentDistance) * 0.5;
 
-        _positionBuffer[index] += dir * 15 * _deltaTime;
-        _positionBuffer[id2] -= dir * 15 * _deltaTime;
+        _positionBuffer[index] += dir * _collisionStiffness * _deltaTime;
+        _positionBuffer[id2] -= dir * _collisionStiffness * _deltaTime;
     }
 }
 
@@ -69,7 +70,7 @@ void CollisionDetection(uint3 tid : SV_DispatchThreadID)
 
     const uint offsetStart = _offsets[id];
     const uint offsetEnd = _offsets[id + 1];
-    if (offsetEnd - offsetStart <= 1)// || offsetEnd - offsetStart > 50)
+    if (offsetEnd - offsetStart <= 1 || offsetEnd - offsetStart > 150)
     {
         return;
     }
