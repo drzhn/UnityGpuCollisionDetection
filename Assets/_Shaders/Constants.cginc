@@ -25,7 +25,7 @@ float3 ClampBounds(float3 position)
 {
     return float3(
         clamp(position.x, 0.001, 40),
-        clamp(position.y, 0.001, 40),
+        clamp(position.y, 0.001, 1024),
         clamp(position.z, 0.001, 40)
     );
 }
